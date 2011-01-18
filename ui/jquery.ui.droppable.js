@@ -215,8 +215,9 @@ $.ui.ddmanager = {
 			m[i].offset = m[i].element.offset();
 			m[i].proportions = { width: m[i].element[0].offsetWidth, height: m[i].element[0].offsetHeight };
 
-			if(type == "mousedown") m[i]._activate.call(m[i], event); //Activate the droppable if used directly from draggables
-
+            if(type == "mousedown" || type == "touchstart" ) {
+                m[i]._activate.call(m[i], event); //Activate the droppable if used directly from draggables
+            }
 		}
 
 	},

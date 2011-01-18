@@ -18,11 +18,44 @@ $.widget("ui.mouse", {
 		distance: 1,
 		delay: 0
 	},
+
+	_isTouchDevice: function() {
+	    try {
+	        document.createEvent("TouchEvent");
+	        return true;
+	    } catch (e) {
+	        return false;
+	    }
+	},
+
+	_downType: function() {
+		if(this._isTouchDevice()) {
+			return 'touchstart';
+        } else {
+			return 'mousedown';
+        }
+	},
+
+	_upType: function() {
+		if(this._isTouchDevice()) {
+			return 'touchend';
+        } else {
+			return 'mouseup';
+        }
+	},
+
+	_moveType: function() {
+		if(this._isTouchDevice()) {
+			return 'touchmove';
+        } else {
+			return 'mousemove';
+        }
+	},
+
 	_mouseInit: function() {
 		var self = this;
-
 		this.element
-			.bind('mousedown.'+this.widgetName, function(event) {
+            .bind(this._downType()+"."+this.widgetName, function(event) {
 				return self._mouseDown(event);
 			})
 			.bind('click.'+this.widgetName, function(event) {
@@ -42,11 +75,33 @@ $.widget("ui.mouse", {
 		this.element.unbind('.'+this.widgetName);
 	},
 
+    _createInteractiveEvent: function(event) {
+        var evt = {};
+        var original = (event.originalEvent instanceof MouseEvent) ? event : event.originalEvent.touches[0];
+        for( var it in original) {
+            if(typeof original[it] !== 'function') {
+                evt[it] = original[it];
+            }
+        }
+        evt.type = event.type;
+        evt.originalEvent = event.originalEvent;
+        evt.preventDefault = function() { event.preventDefault(); };
+        evt.stopPropagation = function() { event.stopPropagation(); };
+        evt.stopImmediatePropagation = function() { event.stopImmediatePropagation(); };
+        evt.isDefaultPrevented = function() { event.isDefaultPrevented(); };
+        evt.isImmediatePropagationStopped = function() { event.isImmediatePropagationStopped(); };
+        evt.isPropagationStopped = function() { event.isPropagationStopped(); };
+        return evt;
+    },
+
 	_mouseDown: function(event) {
 		// don't let more than one widget handle mouseStart
 		// TODO: figure out why we have to use originalEvent
 		event.originalEvent = event.originalEvent || {};
 		if (event.originalEvent.mouseHandled) { return; }
+
+        // create a generic interactive event to replace specific MouseEvents and TouchEvents
+        event = this._createInteractiveEvent(event);
 
 		// we may have missed mouseup (out of window)
 		(this._mouseStarted && this._mouseUp(event));
@@ -56,7 +111,7 @@ $.widget("ui.mouse", {
 		var self = this,
 			btnIsLeft = (event.which == 1),
 			elIsCancel = (typeof this.options.cancel == "string" ? $(event.target).parents().add(event.target).filter(this.options.cancel).length : false);
-		if (!btnIsLeft || elIsCancel || !this._mouseCapture(event)) {
+		if ((!btnIsLeft && !this._isTouchDevice()) || elIsCancel || !this._mouseCapture(event)) {
 			return true;
 		}
 
@@ -83,8 +138,12 @@ $.widget("ui.mouse", {
 			return self._mouseUp(event);
 		};
 		$(document)
-			.bind('mousemove.'+this.widgetName, this._mouseMoveDelegate)
-			.bind('mouseup.'+this.widgetName, this._mouseUpDelegate);
+            .bind(this._moveType()+"."+this.widgetName, this._mouseMoveDelegate)
+			.bind(this._upType()+"."+this.widgetName, this._mouseUpDelegate);
+
+        if(this._isTouchDevice()) {
+            $(document).bind('touchcancel.'+this.widgetName, this._mouseUpDelegate);
+        }
 
 		event.preventDefault();
 		event.originalEvent.mouseHandled = true;
@@ -92,6 +151,8 @@ $.widget("ui.mouse", {
 	},
 
 	_mouseMove: function(event) {
+        event = this._createInteractiveEvent(event);
+
 		// IE mouseup check - mouseup happened when mouse was out of window
 		if ($.browser.msie && !(document.documentMode >= 9) && !event.button) {
 			return this._mouseUp(event);
@@ -112,9 +173,15 @@ $.widget("ui.mouse", {
 	},
 
 	_mouseUp: function(event) {
+        event = this._createInteractiveEvent(event);
+
 		$(document)
-			.unbind('mousemove.'+this.widgetName, this._mouseMoveDelegate)
-			.unbind('mouseup.'+this.widgetName, this._mouseUpDelegate);
+            .unbind(this._moveType()+"."+this.widgetName, this._mouseMoveDelegate)
+			.unbind(this._upType()+"."+this.widgetName, this._mouseUpDelegate);
+
+        if(this._isTouchDevice()) {
+            $(document).unbind('touchcancel.'+this.widgetName, this._mouseUpDelegate);
+        }
 
 		if (this._mouseStarted) {
 			this._mouseStarted = false;
