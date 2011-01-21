@@ -50,6 +50,22 @@ $.widget("ui.draggable", $.ui.mouse, {
 		(this.options.addClasses && this.element.addClass("ui-draggable"));
 		(this.options.disabled && this.element.addClass("ui-draggable-disabled"));
 
+    // browser check for touchscreens
+    // check for webkit positioning capability
+    this.webkit_css_enabled = false;
+    if( navigator.userAgent.match(/iPhone/i) ) this.webkit_css_enabled = true;
+    else if( navigator.userAgent.match(/iPod/i) ) this.webkit_css_enabled = true;
+    else if( navigator.userAgent.match(/iPad/i) ) this.webkit_css_enabled = true;
+    else if( navigator.userAgent.match(/Chrome/i) ) this.webkit_css_enabled = true;
+    else if( navigator.userAgent.match(/Safari/i) ) this.webkit_css_enabled = true;
+
+    if( navigator.userAgent.match(/Android/i) ) this.is_android = true;
+    if( navigator.userAgent.match(/Android 2.2/i) ) this.is_android22 = true;
+    if( navigator.userAgent.match(/iPhone/i) || navigator.userAgent.match(/iPod/i) || navigator.userAgent.match(/iPad/i) ) this.is_idevice = true;
+
+    // special cases for touchscreens
+    if( this.is_android == true || this.is_idevice == true ) this.is_touchscreen = true;
+
 		this._mouseInit();
 
 	},
@@ -172,8 +188,11 @@ $.widget("ui.draggable", $.ui.mouse, {
 			this.position = ui.position;
 		}
 
+    this._update2DPosition(this.helper[0], this.position.left, this.position.top );
+    /*
 		if(!this.options.axis || this.options.axis != "y") this.helper[0].style.left = this.position.left+'px';
 		if(!this.options.axis || this.options.axis != "x") this.helper[0].style.top = this.position.top+'px';
+		*/
 		if($.ui.ddmanager) $.ui.ddmanager.drag(this, event);
 
 		return false;
@@ -198,11 +217,23 @@ $.widget("ui.draggable", $.ui.mouse, {
 
 		if((this.options.revert == "invalid" && !dropped) || (this.options.revert == "valid" && dropped) || this.options.revert === true || ($.isFunction(this.options.revert) && this.options.revert.call(this.element, dropped))) {
 			var self = this;
-			$(this.helper).animate(this.originalPosition, parseInt(this.options.revertDuration, 10), function() {
-				if(self._trigger("stop", event) !== false) {
-					self._clear();
-				}
-			});
+      // TODO: Optimize for touchscreen
+
+      if(this.webkit_css_enabled) {
+        this._animate2DPosition( this.helper.get(0), this.originalPosition.left, this.originalPosition.top, parseInt( this.options.revertDuration, 10 )/1000);
+        setTimeout( function(){
+          if(self._trigger("stop", event) !== false) {
+            self._clear();
+          }
+        }, this.options.revertDuration);
+      }
+      else {
+        $(this.helper).animate(this.originalPosition, parseInt(this.options.revertDuration, 10), function() {
+          if(self._trigger("stop", event) !== false) {
+            self._clear();
+          }
+        });
+      }
 		} else {
 			if(this._trigger("stop", event) !== false) {
 				this._clear();
@@ -454,7 +485,44 @@ $.widget("ui.draggable", $.ui.mouse, {
 			originalPosition: this.originalPosition,
 			offset: this.positionAbs
 		};
-	}
+	},
+
+  _update2DPosition: function ( element, x, y ) {
+    if( !element ) return;
+
+    if( !this.webkit_css_enabled || this.is_android22 ) {
+      element.style.left = x + 'px';
+      element.style.top = y + 'px';
+    } else {
+      element.style.left = '0px';
+      element.style.top = '0px';
+      // stop any previous webkit animations
+      element.style.webkitTransition = '';
+      element.style.webkitTransform = '';
+      // set new position transform
+      var new_transform = "translate3d(" + x + "px, " + y + "px, 0px)";
+      if( element.style.webkitTransform != new_transform ) {
+        element.style.webkitTransform = new_transform; // only apply style if not already in position
+      }
+    }
+  },
+
+  _animate2DPosition: function ( element, x, y, duration ) {
+    if( !element ) return;
+
+    if( !this.webkit_css_enabled || this.is_android22 ) {
+      //new Effect.Move( element, { x: x, y: y, mode: 'absolute', duration:duration });		
+      $(element).animate({ 'left': x, 'top': y}, duration * 1000);
+    } else {
+      element.style.left = element.style.top = "0px";
+      element.style.webkitTransition = "-webkit-transform " + duration + "s";
+      var new_transform = "translate3d(" + x + "px, " + y + "px, 0px)";
+      if( element.style.webkitTransform != new_transform ) {
+        element.style.webkitTransform = new_transform; // only apply style if not already in position
+      }
+    }
+  }
+
 
 });
 
@@ -516,7 +584,6 @@ $.ui.plugin.add("draggable", "connectToSortable", {
 
 	},
 	drag: function(event, ui) {
-
 		var inst = $(this).data("draggable"), self = this;
 
 		var checkPos = function(o) {
@@ -710,7 +777,6 @@ $.ui.plugin.add("draggable", "snap", {
 
 	},
 	drag: function(event, ui) {
-
 		var inst = $(this).data("draggable"), o = inst.options;
 		var d = o.snapTolerance;
 
